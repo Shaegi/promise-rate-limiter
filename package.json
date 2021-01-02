@@ -10,7 +10,7 @@
     "type": "git",
     "url": "git+https://github.com/Shaegi/promise-rate-limiter.git"
   },
-  "author": "",
+  "author": "Shägi",
   "license": "ISC",
   "bugs": {
     "url": "https://github.com/Shaegi/promise-rate-limiter/issues"
