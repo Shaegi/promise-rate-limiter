@@ -1,7 +1,7 @@
 
 class RateLimiter {
     callQueue = []
-    currentCalls = []
+    currentCalls = {}
     limits = []
     intervals = []
     callback = () => Promise.resolve()
@@ -10,32 +10,42 @@ class RateLimiter {
         this.limits = limits
         this.callback = callback
         limits.forEach((element, i) => {
-            this.currentCalls[i] = 0
-            this.intervals[i] = setInterval(async () => {
-                this.currentCalls[i] = 0
-                if(this.callQueue.length > 0 && !this.isAnyLimitReached()) {
-                    do {
-                        const curr = this.callQueue.shift()
-                        if(curr) {
-                            await this.emit(curr.resolve, curr.reject, curr.args)
-                        }
-                    } while(this.callQueue.length > 0 && !this.isAnyLimitReached())
-                }
+            this.intervals[i] = setInterval(async () =>     {
+                Object.keys(this.currentCalls).forEach(id => {
+                    this.currentCalls[id][i] = 0
+                    if(this.callQueue.length > 0 && !this.isAnyLimitReached(id)) {
+                        do {
+                            const curr = this.callQueue.shift()
+                            if(curr) {
+                                this.emit(curr.resolve, curr.reject, id, curr.args)
+                            }
+                        } while(this.callQueue.length > 0 && !this.isAnyLimitReached(id))
+                    }
+                })
             }, element.duration)
         });
     }
     // wrapper around js fetch api
-    call = async (...args) => {
+    call = async (id, ...args) => {
+        if(!this.currentCalls[id]){
+            this.currentCalls[id] = []
+            this.limits.forEach((limit, i) => {
+                this.currentCalls[id][i] = 0
+            })
+        }
         return new Promise (async (resolve, reject) => {
-            if(!this.isAnyLimitReached()) {
-                return this.emit(resolve, reject, args)
+            if(!this.isAnyLimitReached(id)) {
+                return this.emit(resolve, reject, id, args)
             } else {
-                this.addToQueue(resolve, reject, args)
+                this.addToQueue(resolve, reject, id, args)
             }
         })
     }
-    async emit(resolve, reject, args = []) {
-        this.currentCalls = this.currentCalls.map(c => c + 1)
+    async emit(resolve, reject, id, args = []) {
+        this.currentCalls = Object.keys(this.currentCalls).reduce((acc, curr) => {
+            acc[curr] = this.currentCalls[curr].map((c) => c+1)
+            return acc
+        }, {}) 
         try {
             const res = await this.callback(...args)
             resolve(res)
@@ -43,11 +53,11 @@ class RateLimiter {
             reject(e)
         }
     }
-    isAnyLimitReached = () => {
-        return this.limits.some((limiter, i) => this.currentCalls[i] >= limiter.limit)
+    isAnyLimitReached = (id) => {
+        return this.limits.some((limiter, i) => this.currentCalls[id][i] + 1 >= limiter.limit)
     }
-    addToQueue (resolve, reject, args) {
-        this.callQueue.push({ resolve, reject, args })
+    addToQueue (resolve, id, reject, args) {
+        this.callQueue.push({ resolve, reject, id, args })
     }
 }
 
